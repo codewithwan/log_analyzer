@@ -63,21 +63,13 @@ def detect_anomalies(log_entry):
 
 # Pencarian berdasarkan kata kunci
 def find_in_logs(log_entries, search_terms):
-    found_entries = []
     terms = search_terms.split(',')
-    for entry in log_entries:
-        if all(term in entry['url'] or term in entry['status'] for term in terms):
-            found_entries.append(entry)
-    return found_entries
+    return [entry for entry in log_entries if all(term in entry['url'] or term in entry['status'] for term in terms)]
 
 # Pencarian Regex Lanjutan
 def advanced_regex_search(log_entries, regex_pattern):
-    found_entries = []
     pattern = re.compile(regex_pattern)
-    for entry in log_entries:
-        if pattern.search(entry['url']) or pattern.search(entry['user_agent']):
-            found_entries.append(entry)
-    return found_entries
+    return [entry for entry in log_entries if pattern.search(entry['url']) or pattern.search(entry['user_agent'])]
 
 # Pengelompokan IP Berdasarkan Aktivitas
 def group_ips_by_activity(log_entries):
@@ -114,13 +106,18 @@ def detect_attack_patterns(log_entries, attack_type):
 # Analisis File Log Berukuran Besar
 def analyze_large_log(file_path, chunk_size=1024):
     log_entries = []
-    with open(file_path, 'r') as file:
-        while chunk := file.read(chunk_size):
-            for line in chunk.splitlines():
-                parsed_entry = parse_log_entry(line)
-                if parsed_entry:
-                    parsed_entry = sanitize_log_entry(parsed_entry)
-                    log_entries.append(parsed_entry)
+    try:
+        with open(file_path, 'r') as file:
+            while chunk := file.read(chunk_size):
+                for line in chunk.splitlines():
+                    parsed_entry = parse_log_entry(line)
+                    if parsed_entry:
+                        parsed_entry = sanitize_log_entry(parsed_entry)
+                        log_entries.append(parsed_entry)
+    except FileNotFoundError:
+        print(f"{Fore.RED}Error: File {file_path} not found.{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
     return log_entries
 
 # Analisis Multi-Log
@@ -139,6 +136,7 @@ def print_loading_bar(iteration, total, prefix='', suffix='', decimals=1, length
     print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='\r')
     if iteration == total:
         print()
+        print('\r' + ' ' * (len(prefix) + length + len(suffix) + 10), end='\r')
 
 # Analisis log
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
@@ -146,23 +144,26 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
         raise FileNotFoundError(f"File {file_path} not found.")
 
     log_entries = []
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        total_lines = len(lines)
-        for i, line in enumerate(lines):
-            print_loading_bar(i + 1, total_lines, prefix='Processing:', suffix='Complete', length=50)
-            parsed_entry = parse_log_entry(line)
-            if parsed_entry:
-                parsed_entry = sanitize_log_entry(parsed_entry)
-                entry_date = datetime.strptime(parsed_entry['date'], '%d/%b/%Y:%H:%M:%S %z')
-                if start_date and entry_date < start_date:
-                    continue
-                if end_date and entry_date > end_date:
-                    continue
-                anomalies, rating = detect_anomalies(parsed_entry)
-                parsed_entry['anomalies'] = anomalies
-                parsed_entry['rating'] = rating
-                log_entries.append(parsed_entry)
+    try:
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+            total_lines = len(lines)
+            for i, line in enumerate(lines):
+                print_loading_bar(i + 1, total_lines, prefix='Processing:', suffix='Complete', length=50)
+                parsed_entry = parse_log_entry(line)
+                if parsed_entry:
+                    parsed_entry = sanitize_log_entry(parsed_entry)
+                    entry_date = datetime.strptime(parsed_entry['date'], '%d/%b/%Y:%H:%M:%S %z')
+                    if start_date and entry_date < start_date:
+                        continue
+                    if end_date and entry_date > end_date:
+                        continue
+                    anomalies, rating = detect_anomalies(parsed_entry)
+                    parsed_entry['anomalies'] = anomalies
+                    parsed_entry['rating'] = rating
+                    log_entries.append(parsed_entry)
+    except Exception as e:
+        print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
 
     if only_anomalies:
         log_entries = [entry for entry in log_entries if entry['anomalies']]
@@ -300,11 +301,7 @@ def main():
     )
     parser.add_argument(
         "--find", 
-        help="Search for a keyword (IP, URL, etc.). Example: --find 185.160.71.3"
-    )
-    parser.add_argument(
-        "--finds", 
-        help="Search for multiple keywords (URL, status, etc.). Example: --finds sql,200"
+        help="Search for single or multiple keywords (URL, status, etc.). Example: --find pdf , --find sql,200"
     )
     parser.add_argument(
         "--regex-search", 
@@ -340,8 +337,8 @@ def main():
         else:
             log_entries = analyze_log(args.file, args.only_anomalies, start_date, end_date)
 
-        if args.finds:
-            log_entries = find_in_logs(log_entries, args.finds)
+        if args.find:
+            log_entries = find_in_logs(log_entries, args.find)
 
         if args.regex_search:
             log_entries = advanced_regex_search(log_entries, args.regex_search)
@@ -377,6 +374,8 @@ def main():
 
     except FileNotFoundError as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"{Fore.RED}Unexpected error: {e}{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
