@@ -62,12 +62,64 @@ def detect_anomalies(log_entry):
 def find_in_logs(log_entries, search_term):
     found_entries = []
     for entry in log_entries:
-        # Mencari dalam IP, URL, atau User-Agent
         if (search_term in entry['ip'] or
             search_term in entry['url'] or
             search_term in entry['user_agent']):
             found_entries.append(entry)
     return found_entries
+
+# Pencarian Regex Lanjutan
+def advanced_regex_search(log_entries, regex_pattern):
+    found_entries = []
+    pattern = re.compile(regex_pattern)
+    for entry in log_entries:
+        if pattern.search(entry['url']) or pattern.search(entry['user_agent']):
+            found_entries.append(entry)
+    return found_entries
+
+# Pengelompokan IP Berdasarkan Aktivitas
+def group_ips_by_activity(log_entries):
+    ip_activity = {}
+    for entry in log_entries:
+        ip = entry['ip']
+        if ip not in ip_activity:
+            ip_activity[ip] = []
+        ip_activity[ip].append(entry)
+    return ip_activity
+
+# Deteksi Pola Serangan
+def detect_attack_patterns(log_entries):
+    attack_patterns = {
+        'bruteforce': re.compile(r'login|signin|password|admin', re.IGNORECASE),
+    }
+    attack_stats = {pattern: Counter() for pattern in attack_patterns}
+    url_stats = {pattern: Counter() for pattern in attack_patterns}
+    for entry in log_entries:
+        for pattern_name, pattern in attack_patterns.items():
+            if pattern.search(entry['url']):
+                attack_stats[pattern_name][entry['ip']] += 1
+                url_stats[pattern_name][entry['url']] += 1
+    return attack_stats, url_stats
+
+# Analisis File Log Berukuran Besar
+def analyze_large_log(file_path, chunk_size=1024):
+    log_entries = []
+    with open(file_path, 'r') as file:
+        while chunk := file.read(chunk_size):
+            for line in chunk.splitlines():
+                parsed_entry = parse_log_entry(line)
+                if parsed_entry:
+                    parsed_entry = sanitize_log_entry(parsed_entry)
+                    log_entries.append(parsed_entry)
+    return log_entries
+
+# Analisis Multi-Log
+def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end_date=None):
+    all_log_entries = []
+    for file_path in file_paths:
+        log_entries = analyze_log(file_path, only_anomalies, start_date, end_date)
+        all_log_entries.extend(log_entries)
+    return all_log_entries
 
 # Analisis log
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
@@ -118,13 +170,13 @@ def display_log_entries(log_entries):
     for entry in log_entries:
         anomalies = ", ".join(entry['anomalies']) if entry['anomalies'] else "None"
         table.add_row([entry['ip'],
-                       entry['date'],
-                       entry['method'],
-                       entry['url'],
-                       entry['status'],
-                       entry['size'],
-                       anomalies,
-                       entry['rating']])
+                        entry['date'],
+                        entry['method'],
+                        entry['url'],
+                        entry['status'],
+                        entry['size'],
+                        anomalies,
+                        entry['rating']])
 
     return table
 
@@ -179,6 +231,20 @@ def main():
         help="Search for a keyword (IP, URL, etc.). Example: --find 185.160.71.3"
     )
     parser.add_argument(
+        "--regex-search", 
+        help="Search logs using a regex pattern. Example: --regex-search 'admin'"
+    )
+    parser.add_argument(
+        "--detect-bruteforce", 
+        action="store_true", 
+        help="Detect brute force attack patterns. Example: --detect-bruteforce"
+    )
+    parser.add_argument(
+        "--multi-log", 
+        nargs='+', 
+        help="Analyze multiple log files. Example: --multi-log log1.txt log2.txt"
+    )
+    parser.add_argument(
         "-o", "--output", 
         help="Output file to save the result. If not provided, the result is displayed in the terminal.\nExample: -o output.txt"
     )
@@ -188,11 +254,36 @@ def main():
     end_date = datetime.strptime(args.end_date, '%Y-%m-%d') if args.end_date else None
 
     try:
-        log_entries = analyze_log(args.file, args.only_anomalies, start_date, end_date) 
+        if args.multi_log:
+            log_entries = analyze_multiple_logs(args.multi_log, args.only_anomalies, start_date, end_date)
+        else:
+            log_entries = analyze_log(args.file, args.only_anomalies, start_date, end_date)
+
         if args.find:
             log_entries = find_in_logs(log_entries, args.find)
 
-        if args.stats:
+        if args.regex_search:
+            log_entries = advanced_regex_search(log_entries, args.regex_search)
+
+        if args.detect_bruteforce:
+            attack_stats, url_stats = detect_attack_patterns(log_entries)
+            brute_force_attempts = attack_stats['bruteforce']
+            top_urls = url_stats['bruteforce']
+            
+            ip_table = PrettyTable()
+            ip_table.field_names = ["IP", "Attempts"]
+            for ip, count in brute_force_attempts.items():
+                if count > 10:  
+                    ip_table.add_row([ip, count])
+            
+            url_table = PrettyTable()
+            url_table.field_names = ["URL", "Attempts"]
+            for url, count in top_urls.most_common(5):
+                url_table.add_row([url, count])
+            
+            result = f"Brute Force Attempts: {sum(brute_force_attempts.values())}\n{ip_table}\n"
+            result += f"\nTop Targeted URLs:\n{url_table}"
+        elif args.stats:
             stats = generate_statistics(log_entries)
             result = display_statistics(stats)
         else:
