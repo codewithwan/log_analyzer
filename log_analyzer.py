@@ -4,6 +4,9 @@ import re
 from collections import Counter
 from prettytable import PrettyTable
 from datetime import datetime
+from colorama import Fore, Style, init
+
+init()
 
 # Parsing log format
 def parse_log_entry(entry):
@@ -59,12 +62,11 @@ def detect_anomalies(log_entry):
     return anomalies, rating
 
 # Pencarian berdasarkan kata kunci
-def find_in_logs(log_entries, search_term):
+def find_in_logs(log_entries, search_terms):
     found_entries = []
+    terms = search_terms.split(',')
     for entry in log_entries:
-        if (search_term in entry['ip'] or
-            search_term in entry['url'] or
-            search_term in entry['user_agent']):
+        if all(term in entry['url'] or term in entry['status'] for term in terms):
             found_entries.append(entry)
     return found_entries
 
@@ -88,17 +90,25 @@ def group_ips_by_activity(log_entries):
     return ip_activity
 
 # Deteksi Pola Serangan
-def detect_attack_patterns(log_entries):
+def detect_attack_patterns(log_entries, attack_type):
     attack_patterns = {
         'bruteforce': re.compile(r'login|signin|password|admin', re.IGNORECASE),
+        'fileaccess': re.compile(r'\.sqlite|\.log|\.db|\.pdf|\.sql', re.IGNORECASE),
     }
-    attack_stats = {pattern: Counter() for pattern in attack_patterns}
-    url_stats = {pattern: Counter() for pattern in attack_patterns}
+    if attack_type not in attack_patterns:
+        raise ValueError(f"Unknown attack type: {attack_type}")
+
+    attack_stats = Counter()
+    url_stats = Counter()
+    pattern = attack_patterns[attack_type]
     for entry in log_entries:
-        for pattern_name, pattern in attack_patterns.items():
-            if pattern.search(entry['url']):
-                attack_stats[pattern_name][entry['ip']] += 1
-                url_stats[pattern_name][entry['url']] += 1
+        if pattern.search(entry['url']):
+            attack_stats[entry['ip']] += 1
+            url_stats[entry['url']] += 1
+
+    if attack_type == 'bruteforce':
+        attack_stats = {ip: count for ip, count in attack_stats.items() if count >= 5}
+
     return attack_stats, url_stats
 
 # Analisis File Log Berukuran Besar
@@ -121,6 +131,15 @@ def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end
         all_log_entries.extend(log_entries)
     return all_log_entries
 
+# Function to display a loading bar
+def print_loading_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='\r')
+    if iteration == total:
+        print()
+
 # Analisis log
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
     if not os.path.exists(file_path):
@@ -128,7 +147,10 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
 
     log_entries = []
     with open(file_path, 'r') as file:
-        for line in file:
+        lines = file.readlines()
+        total_lines = len(lines)
+        for i, line in enumerate(lines):
+            print_loading_bar(i + 1, total_lines, prefix='Processing:', suffix='Complete', length=50)
             parsed_entry = parse_log_entry(line)
             if parsed_entry:
                 parsed_entry = sanitize_log_entry(parsed_entry)
@@ -183,24 +205,74 @@ def display_log_entries(log_entries):
 # Tampilkan statistik
 def display_statistics(stats):
     output = []
-    output.append("\n=== Statistics ===")
-    output.append(f"Total Requests: {stats['total_requests']}")
-    output.append("\nTop 5 IPs:")
+    output.append(Fore.GREEN + "\n=== Statistics ===" + Style.RESET_ALL)
+    output.append(f"Total Requests: {Fore.YELLOW}{stats['total_requests']}{Style.RESET_ALL}")
+    output.append(Fore.GREEN + "\nTop 5 IPs:" + Style.RESET_ALL)
     for ip, count in stats['ip_counter'].most_common(5):
-        output.append(f"  {ip}: {count} requests")
-    output.append("\nHTTP Methods:")
+        output.append(f"  {Fore.CYAN}{ip}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL} requests")
+    output.append(Fore.GREEN + "\nHTTP Methods:" + Style.RESET_ALL)
     for method, count in stats['method_counter'].items():
-        output.append(f"  {method}: {count}")
-    output.append("\nHTTP Status Codes:")
+        output.append(f"  {Fore.CYAN}{method}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL}")
+    output.append(Fore.GREEN + "\nHTTP Status Codes:" + Style.RESET_ALL)
     for status, count in stats['status_counter'].items():
-        output.append(f"  {status}: {count}")
+        output.append(f"  {Fore.CYAN}{status}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL}")
     
     return "\n".join(output)
+
+# Generate report of suspicious IPs
+def generate_suspicious_ip_report(log_entries):
+    suspicious_ips = {}
+    suspicious_patterns = {
+        'Directory traversal': re.compile(r'(\.\./|\.\.\\)'),
+        'SQL injection': re.compile(r'(\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|--|#)\b)', re.IGNORECASE),
+        'XSS': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror=)\b)', re.IGNORECASE),
+        'Sensitive file access': re.compile(r'(\b(?:admin|root|config|passwd|shadow)\b)', re.IGNORECASE),
+        'File access': re.compile(r'\.sqlite|\.log|\.db|\.pdf|\.sql', re.IGNORECASE),
+        'Brute force': re.compile(r'login|signin|password|admin', re.IGNORECASE)
+    }
+
+    for entry in log_entries:
+        for activity, pattern in suspicious_patterns.items():
+            if pattern.search(entry['url']):
+                if entry['ip'] not in suspicious_ips:
+                    suspicious_ips[entry['ip']] = {'count': 0, 'activities': set()}
+                suspicious_ips[entry['ip']]['count'] += 1
+                suspicious_ips[entry['ip']]['activities'].add(activity)
+
+    # Filter out IPs with less than 5 brute force attempts
+    for ip, details in list(suspicious_ips.items()):
+        if 'Brute force' in details['activities'] and details['count'] < 10:
+            details['activities'].remove('Brute force')
+            if not details['activities']:
+                del suspicious_ips[ip]
+
+    table = PrettyTable()
+    table.field_names = ["IP", "Suspicious Activity Count", "Activities", "Threat Level"]
+    sorted_ips = sorted(suspicious_ips.items(), key=lambda x: (-len(x[1]['activities']), -x[1]['count']))
+    for ip, details in sorted_ips:
+        activity_count = len(details['activities'])
+        if activity_count > 5:
+            threat_level = "High"
+        elif activity_count > 2:
+            threat_level = "Medium"
+        else:
+            threat_level = "Low"
+        activities = ", ".join(details['activities'])
+        table.add_row([ip, details['count'], activities, threat_level])
+
+    return table
 
 # Main function
 def main():
     parser = argparse.ArgumentParser(
-        description="HTTP Log Analyzer Tool",
+        description=Fore.GREEN + r"""
+    __                                  __                     
+   / /___  ____ _    ____ _____  ____ _/ /_  ______  ___  _____
+  / / __ \/ __ `/   / __ `/ __ \/ __ `/ / / / /_  / / _ \/ ___/
+ / / /_/ / /_/ /   / /_/ / / / / /_/ / / /_/ / / /_/  __/ /    
+/_/\____/\__, /____\__,_/_/ /_/\__,_/_/\__, / /___/\___/_/     
+        /____/_____/                  /____/  """ + Fore.BLUE + "@codewithwan" + Fore.GREEN + r"""     
+        """ + Style.RESET_ALL,
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
@@ -231,13 +303,22 @@ def main():
         help="Search for a keyword (IP, URL, etc.). Example: --find 185.160.71.3"
     )
     parser.add_argument(
+        "--finds", 
+        help="Search for multiple keywords (URL, status, etc.). Example: --finds sql,200"
+    )
+    parser.add_argument(
         "--regex-search", 
         help="Search logs using a regex pattern. Example: --regex-search 'admin'"
     )
     parser.add_argument(
-        "--detect-bruteforce", 
+        "--detect", 
+        choices=['bruteforce', 'fileaccess'], 
+        help="Detect specific attack patterns. Example: --detect bruteforce"
+    )
+    parser.add_argument(
+        "--report", 
         action="store_true", 
-        help="Detect brute force attack patterns. Example: --detect-bruteforce"
+        help="Generate a summary report of suspicious IPs.\nExample: --report"
     )
     parser.add_argument(
         "--multi-log", 
@@ -259,45 +340,43 @@ def main():
         else:
             log_entries = analyze_log(args.file, args.only_anomalies, start_date, end_date)
 
-        if args.find:
-            log_entries = find_in_logs(log_entries, args.find)
+        if args.finds:
+            log_entries = find_in_logs(log_entries, args.finds)
 
         if args.regex_search:
             log_entries = advanced_regex_search(log_entries, args.regex_search)
 
-        if args.detect_bruteforce:
-            attack_stats, url_stats = detect_attack_patterns(log_entries)
-            brute_force_attempts = attack_stats['bruteforce']
-            top_urls = url_stats['bruteforce']
-            
-            ip_table = PrettyTable()
-            ip_table.field_names = ["IP", "Attempts"]
-            for ip, count in brute_force_attempts.items():
-                if count > 10:  
-                    ip_table.add_row([ip, count])
+        if args.detect:
+            attack_stats, url_stats = detect_attack_patterns(log_entries, args.detect)
+            table = PrettyTable()
+            table.field_names = ["IP", "Attempts"]
+            for ip, count in attack_stats.items():
+                table.add_row([ip, count])
             
             url_table = PrettyTable()
             url_table.field_names = ["URL", "Attempts"]
-            for url, count in top_urls.most_common(5):
+            for url, count in url_stats.most_common(5):
                 url_table.add_row([url, count])
             
-            result = f"Brute Force Attempts: {sum(brute_force_attempts.values())}\n{ip_table}\n"
-            result += f"\nTop Targeted URLs:\n{url_table}"
+            result = f"{Fore.RED}{args.detect.capitalize()} Attempts: {sum(attack_stats.values())}{Style.RESET_ALL}\n{table}\n"
+            result += f"\n{Fore.RED}Top Targeted URLs:{Style.RESET_ALL}\n{url_table}"
         elif args.stats:
             stats = generate_statistics(log_entries)
             result = display_statistics(stats)
+        elif args.report:
+            result = generate_suspicious_ip_report(log_entries)
         else:
             result = display_log_entries(log_entries)
 
         if args.output:
             with open(args.output, 'w') as output_file:
-                output_file.write(result)
+                output_file.write(str(result))
             print(f"Output saved to {args.output}")
         else:
             print(result)
 
     except FileNotFoundError as e:
-        print(f"Error: {e}")
+        print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
