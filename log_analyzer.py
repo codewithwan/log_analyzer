@@ -64,7 +64,17 @@ def detect_anomalies(log_entry):
 # Search with keyword
 def find_in_logs(log_entries, search_terms):
     terms = search_terms.split(',')
-    return [entry for entry in log_entries if all(term in entry['url'] or term in entry['status'] for term in terms)]
+    highlighted_entries = []
+    for entry in log_entries:
+        if all(term in entry['url'] or term in entry['status'] or term in entry['ip'] or term in entry['method'] for term in terms):
+            highlighted_entry = entry.copy()
+            for term in terms:
+                highlighted_entry['url'] = re.sub(f"({term})", f"{Fore.RED}{Style.BRIGHT}\\1{Style.RESET_ALL}", highlighted_entry['url'])
+                highlighted_entry['status'] = re.sub(f"({term})", f"{Fore.RED}{Style.BRIGHT}\\1{Style.RESET_ALL}", highlighted_entry['status'])
+                highlighted_entry['ip'] = re.sub(f"({term})", f"{Fore.RED}{Style.BRIGHT}\\1{Style.RESET_ALL}", highlighted_entry['ip'])
+                highlighted_entry['method'] = re.sub(f"({term})", f"{Fore.RED}{Style.BRIGHT}\\1{Style.RESET_ALL}", highlighted_entry['method'])
+            highlighted_entries.append(highlighted_entry)
+    return highlighted_entries
 
 # Search with regex pattern
 def advanced_regex_search(log_entries, regex_pattern):
@@ -343,7 +353,9 @@ def main():
         if args.regex_search:
             log_entries = advanced_regex_search(log_entries, args.regex_search)
 
-        if args.detect:
+        if not log_entries:
+            result = f"{Fore.RED}\nNo entries found matching the criteria.\n{Style.RESET_ALL}"
+        elif args.detect:
             attack_stats, url_stats = detect_attack_patterns(log_entries, args.detect)
             table = PrettyTable()
             table.field_names = ["IP", "Attempts"]
@@ -367,8 +379,8 @@ def main():
 
         if args.output:
             with open(args.output, 'w') as output_file:
-                output_file.write(str(result))
-            print(f"Output saved to {args.output}")
+                output_file.write(re.sub(r'\x1b\[[0-9;]*m', '', str(result)))
+            print(f"{Fore.GREEN}\nOutput saved to {args.output}\n{Style.RESET_ALL}")
         else:
             print(result)
 
