@@ -1,12 +1,5 @@
 # HTTP Log Analyzer Tool
 
-    __                                  __
-   / /___  ____ _    ____ _____  ____ _/ /_  ______  ___  _____
-  / / __ \/ __ `/   / __ `/ __ \/ __ `/ / / / /_  / / _ \/ ___/
- / / /_/ / /_/ /   / /_/ / / / / /_/ / / /_/ / / /_/  __/ /
-/_/\____/\__, /____\__,_/_/ /_/\__,_/_/\__, / /___/\___/_/
-        /____/_____/                  /____/  @codewithwan
-        
 This tool analyzes Apache/Nginx access log files to detect anomalies, generate statistics, and search for specific keywords in the logs. It is designed to help with security monitoring and log file analysis.
 
 ## Features
