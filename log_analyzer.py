@@ -96,6 +96,11 @@ def detect_attack_patterns(log_entries, attack_type):
     attack_patterns = {
         'bruteforce': re.compile(r'login|signin|password|admin', re.IGNORECASE),
         'fileaccess': re.compile(r'\.sqlite|\.log|\.db|\.pdf|\.sql', re.IGNORECASE),
+        'largefile': re.compile(r'\.zip|\.tar|\.gz|\.rar', re.IGNORECASE),
+        'directorytraversal': re.compile(r'(\.\./|\.\.\\)'),
+        'sqli': re.compile(r'(\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|--|#)\b)', re.IGNORECASE),
+        'xss': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror=)\b)', re.IGNORECASE),
+        'forbiddenaccess': re.compile(r'403')
     }
     if attack_type not in attack_patterns:
         raise ValueError(f"Unknown attack type: {attack_type}")
@@ -104,14 +109,15 @@ def detect_attack_patterns(log_entries, attack_type):
     url_stats = Counter()
     pattern = attack_patterns[attack_type]
     for entry in log_entries:
-        if pattern.search(entry['url']):
+        if pattern.search(entry['url']) or (attack_type == 'forbiddenaccess' and entry['status'] == '403'):
             attack_stats[entry['ip']] += 1
             url_stats[entry['url']] += 1
 
     if attack_type == 'bruteforce':
-        attack_stats = {ip: count for ip, count in attack_stats.items() if count >= 5}
+        attack_stats = {ip: count for ip, count in attack_stats.items() if count > 10}
 
-    return attack_stats, url_stats
+    sorted_attack_stats = dict(sorted(attack_stats.items(), key=lambda item: item[1], reverse=True))
+    return sorted_attack_stats, url_stats
 
 # Analyze large log file
 def analyze_large_log(file_path, chunk_size=1024):
@@ -319,7 +325,7 @@ def main():
     )
     parser.add_argument(
         "--detect", 
-        choices=['bruteforce', 'fileaccess'], 
+        choices=['bruteforce', 'fileaccess', 'largefile', 'directorytraversal', 'sqli', 'xss', 'forbiddenaccess'], 
         help="Detect specific attack patterns. Example: --detect bruteforce"
     )
     parser.add_argument(
@@ -364,7 +370,7 @@ def main():
             
             url_table = PrettyTable()
             url_table.field_names = ["URL", "Attempts"]
-            for url, count in url_stats.most_common(5):
+            for url, count in url_stats.most_common(10):
                 url_table.add_row([url, count])
             
             result = f"{Fore.RED}{args.detect.capitalize()} Attempts: {sum(attack_stats.values())}{Style.RESET_ALL}\n{table}\n"
