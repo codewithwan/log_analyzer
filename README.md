@@ -1,5 +1,12 @@
 # HTTP Log Analyzer Tool
 
+    __                                  __
+   / /___  ____ _    ____ _____  ____ _/ /_  ______  ___  _____
+  / / __ \/ __ `/   / __ `/ __ \/ __ `/ / / / /_  / / _ \/ ___/
+ / / /_/ / /_/ /   / /_/ / / / / /_/ / / /_/ / / /_/  __/ /
+/_/\____/\__, /____\__,_/_/ /_/\__,_/_/\__, / /___/\___/_/
+        /____/_____/                  /____/  @codewithwan
+        
 This tool analyzes Apache/Nginx access log files to detect anomalies, generate statistics, and search for specific keywords in the logs. It is designed to help with security monitoring and log file analysis.
 
 ## Features
@@ -51,13 +58,13 @@ python log_analyzer.py -h
     - Example: `--regex-search 'admin'`
 
 - `--detect` {bruteforce,fileaccess} : Detect specific attack patterns.
-    - Example: --detect bruteforce
+    - Example: `--detect bruteforce`
 
 - `--report` :  Generate a summary report of suspicious IPs.
-    - Example: --report
+    - Example: `--report`
 
 - `--multi-log` : Analyze multiple log files.
-    - Example: --multi-log file1.log file2.log
+    - Example: `--multi-log file1.log file2.log`
 
 - `-o`, `--output`: Output file to save the result. If not provided, the result will be displayed in the terminal.
     - Example: `-o output.txt`
