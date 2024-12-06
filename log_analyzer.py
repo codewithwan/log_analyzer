@@ -22,7 +22,7 @@ def sanitize_log_entry(entry):
     entry['user_agent'] = re.sub(r'[^\w\s\-\/\.\;\(\)]', '', entry['user_agent'])
     return entry
 
-# Deteksi anomali
+# Detect Anomalies
 def detect_anomalies(log_entry):
     anomalies = []
     rating = 0
@@ -61,17 +61,17 @@ def detect_anomalies(log_entry):
 
     return anomalies, rating
 
-# Pencarian berdasarkan kata kunci
+# Search with keyword
 def find_in_logs(log_entries, search_terms):
     terms = search_terms.split(',')
     return [entry for entry in log_entries if all(term in entry['url'] or term in entry['status'] for term in terms)]
 
-# Pencarian Regex Lanjutan
+# Search with regex pattern
 def advanced_regex_search(log_entries, regex_pattern):
     pattern = re.compile(regex_pattern)
     return [entry for entry in log_entries if pattern.search(entry['url']) or pattern.search(entry['user_agent'])]
 
-# Pengelompokan IP Berdasarkan Aktivitas
+# Group IPs by activity
 def group_ips_by_activity(log_entries):
     ip_activity = {}
     for entry in log_entries:
@@ -81,7 +81,7 @@ def group_ips_by_activity(log_entries):
         ip_activity[ip].append(entry)
     return ip_activity
 
-# Deteksi Pola Serangan
+# Detect attack patterns
 def detect_attack_patterns(log_entries, attack_type):
     attack_patterns = {
         'bruteforce': re.compile(r'login|signin|password|admin', re.IGNORECASE),
@@ -103,7 +103,7 @@ def detect_attack_patterns(log_entries, attack_type):
 
     return attack_stats, url_stats
 
-# Analisis File Log Berukuran Besar
+# Analyze large log file
 def analyze_large_log(file_path, chunk_size=1024):
     log_entries = []
     try:
@@ -120,7 +120,7 @@ def analyze_large_log(file_path, chunk_size=1024):
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
     return log_entries
 
-# Analisis Multi-Log
+# Analyze multiple log files
 def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end_date=None):
     all_log_entries = []
     for file_path in file_paths:
@@ -138,7 +138,7 @@ def print_loading_bar(iteration, total, prefix='', suffix='', decimals=1, length
         print()
         print('\r' + ' ' * (len(prefix) + length + len(suffix) + 10), end='\r')
 
-# Analisis log
+# Analyze log file
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File {file_path} not found.")
@@ -170,7 +170,7 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
 
     return log_entries
 
-# Statistik log
+# Generate statistics
 def generate_statistics(log_entries):
     total_requests = len(log_entries)
     ip_counter = Counter(entry['ip'] for entry in log_entries)
@@ -185,7 +185,7 @@ def generate_statistics(log_entries):
     }
     return stats
 
-# Tampilkan laporan
+# Display log entries
 def display_log_entries(log_entries):
     table = PrettyTable()
     table.field_names = ["IP", "Date", "Method", "URL", "Status", "Size", "Anomalies", "Rating"]
@@ -203,7 +203,7 @@ def display_log_entries(log_entries):
 
     return table
 
-# Tampilkan statistik
+# Display statistics
 def display_statistics(stats):
     output = []
     output.append(Fore.GREEN + "\n=== Statistics ===" + Style.RESET_ALL)
@@ -240,7 +240,7 @@ def generate_suspicious_ip_report(log_entries):
                 suspicious_ips[entry['ip']]['count'] += 1
                 suspicious_ips[entry['ip']]['activities'].add(activity)
 
-    # Filter out IPs with less than 5 brute force attempts
+    # Filter out IPs 
     for ip, details in list(suspicious_ips.items()):
         if 'Brute force' in details['activities'] and details['count'] < 10:
             details['activities'].remove('Brute force')
@@ -272,7 +272,7 @@ def main():
   / / __ \/ __ `/   / __ `/ __ \/ __ `/ / / / /_  / / _ \/ ___/
  / / /_/ / /_/ /   / /_/ / / / / /_/ / / /_/ / / /_/  __/ /    
 /_/\____/\__, /____\__,_/_/ /_/\__,_/_/\__, / /___/\___/_/     
-        /____/_____/                  /____/  """ + Fore.BLUE + "@codewithwan" + Fore.GREEN + r"""     
+        /____/_____/                  /____/  """ + Fore.RED + "@codewithwan" + Fore.GREEN + r"""     
         """ + Style.RESET_ALL,
         formatter_class=argparse.RawTextHelpFormatter
     )
@@ -320,7 +320,7 @@ def main():
     parser.add_argument(
         "--multi-log", 
         nargs='+', 
-        help="Analyze multiple log files. Example: --multi-log log1.txt log2.txt"
+        help="Analyze multiple log files. Example: --multi-log file1.log file2.log"
     )
     parser.add_argument(
         "-o", "--output", 

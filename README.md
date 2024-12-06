@@ -16,7 +16,7 @@ This tool analyzes Apache/Nginx access log files to detect anomalies, generate s
 - `argparse`, `re`, `prettytable` modules (all can be installed via `pip`).
 
 ```bash
-pip install prettytable
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -24,7 +24,7 @@ pip install prettytable
 ### Command Line Arguments
 
 ```bash
-python log_analyzer.py --file <log_file> [OPTIONS]
+python log_analyzer.py -h
 ```
 
 ### Options:
@@ -44,8 +44,20 @@ python log_analyzer.py --file <log_file> [OPTIONS]
 - `--end-date`: Filter logs up to this date (inclusive). Format: `YYYY-MM-DD`.
     - Example: `--end-date 2023-12-31`
 
-- `--find`: Search for a keyword (IP, URL, etc.) in the log entries.
-    - Example: `--find 185.160.71.3`
+- `--find`: Search for single or multiple keywords (URL, status, etc.).
+    - Example: `--find pdf` , `--find sql,200`
+
+- `--regex-search` : Search logs using a regex pattern.
+    - Example: `--regex-search 'admin'`
+
+- `--detect` {bruteforce,fileaccess} : Detect specific attack patterns.
+    - Example: --detect bruteforce
+
+- `--report` :  Generate a summary report of suspicious IPs.
+    - Example: --report
+
+- `--multi-log` : Analyze multiple log files.
+    - Example: --multi-log file1.log file2.log
 
 - `-o`, `--output`: Output file to save the result. If not provided, the result will be displayed in the terminal.
     - Example: `-o output.txt`
