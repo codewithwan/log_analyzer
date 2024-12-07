@@ -9,6 +9,9 @@ This tool analyzes Apache/Nginx access log files to detect anomalies, generate s
 - **Search Functionality**: Allows you to search for specific IP addresses, URLs, or user-agent strings in the logs.
 - **Customizable Date Range**: You can filter logs by start and end date.
 - **Anomalous Entries Filtering**: Option to only show log entries with detected anomalies.
+- **Multiple Log Files Analysis**: Analyze multiple log files at once.
+- **Suspicious User-Agent Report**: Generate a report of suspicious User-Agents.
+- **Output to File**: Save the analysis result to an output file.
 
 ## Requirements
 
@@ -70,7 +73,7 @@ python log_analyzer.py -h
   - Example: `--multi-log file1.log file2.log`
 
 - `-ua`, `--user-agent-report`: Generate a report of suspicious User-Agents.
-  - Example: Example: --user-agent-report
+  - Example: Example: `--user-agent-report`
 
 - `-o`, `--output`: Output file to save the result. If not provided, the result will be displayed in the terminal.
   - Example: `-o output.txt`
