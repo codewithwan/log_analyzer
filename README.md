@@ -61,7 +61,7 @@ python log_analyzer.py -h
 
   - Example: `--regex-search 'admin'`
 
-- `--detect` {bruteforce,fileaccess,largefile,directorytraversal,sqli,xss,forbiddenaccess,csrf,ssrf} : Detect specific attack patterns.
+- `--detect` {bruteforce,fileaccess,largefile,directorytraversal,sqli,xss,forbiddenaccess,csrf,ssrf,hightraffic} : Detect specific attack patterns.
 
   - Example: `--detect bruteforce`
 

@@ -2,10 +2,12 @@ import argparse
 import os
 import re
 from collections import Counter
+import sys
 from prettytable import PrettyTable
 from datetime import datetime
 from colorama import Fore, Style, init
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 init()
 
@@ -162,6 +164,7 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
         raise FileNotFoundError(f"File {file_path} not found.")
 
     log_entries = []
+    start_time = time.time()
     try:
         with open(file_path, 'r') as file:
             lines = file.readlines()
@@ -169,12 +172,17 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
             with ThreadPoolExecutor() as executor:
                 results = executor.map(process_log_line, lines, [start_date]*total_lines, [end_date]*total_lines)
                 for i, result in enumerate(results):
-                    print_loading_bar(i + 1, total_lines, prefix='Analyzing File:', suffix='Complete', length=50)
+                    elapsed_time = time.time() - start_time
+                    estimated_total_time = (elapsed_time / (i + 1)) * total_lines
+                    remaining_time = estimated_total_time - elapsed_time
+                    print_loading_bar(i + 1, total_lines, prefix='Analyzing File:', suffix=f'Complete \t\t\t Remaining: {remaining_time:.2f}', length=50)
                     if result:
                         log_entries.append(result)
     except Exception as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
 
+    elapsed_time = time.time() - start_time
+    print(f"{Fore.GREEN}\nAnalysis completed in {elapsed_time:.2f} seconds.{Style.RESET_ALL}")
     if only_anomalies:
         log_entries = [entry for entry in log_entries if entry['anomalies']]
 
@@ -266,6 +274,61 @@ def display_statistics(stats):
         output.append(f"  {Fore.CYAN}{status}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL}")
     
     return "\n".join(output)
+
+# Display statistics with graph
+def display_statistics_with_graph(stats):
+    output = []
+    output.append(Fore.GREEN + "\n====== Statistics ======" + Style.RESET_ALL)
+    output.append(f"Total Requests: {Fore.YELLOW}{stats['total_requests']}{Style.RESET_ALL}")
+    
+    output.append(Fore.GREEN + "\nTop 5 IPs:" + Style.RESET_ALL)
+    for ip, count in stats['ip_counter'].most_common(5):
+        output.append(f"  {Fore.CYAN}{ip}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL} requests")
+    
+    output.append(Fore.GREEN + "\nHTTP Methods:" + Style.RESET_ALL)
+    for method, count in stats['method_counter'].items():
+        output.append(f"  {Fore.CYAN}{method}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL}")
+    
+    output.append(Fore.GREEN + "\nHTTP Status Codes:" + Style.RESET_ALL)
+    for status, count in stats['status_counter'].items():
+        output.append(f"  {Fore.CYAN}{status}{Style.RESET_ALL}: {Fore.YELLOW}{count}{Style.RESET_ALL}")
+    
+    # Graphical representation
+    output.append(Fore.GREEN + "\n====== Graphical Representation ======" + Style.RESET_ALL)
+    
+    # IP Graph
+    output.append(Fore.GREEN + "\nTop 5 IPs Graph:" + Style.RESET_ALL)
+    output.append(display_graph(stats['ip_counter'].most_common(5)))
+    
+    # Method Graph
+    output.append(Fore.GREEN + "\nHTTP Methods Graph:" + Style.RESET_ALL)
+    output.append(display_graph(stats['method_counter'].items()))
+    
+    # Status Code Graph
+    output.append(Fore.GREEN + "\nHTTP Status Codes Graph:" + Style.RESET_ALL)
+    output.append(display_graph(stats['status_counter'].items()))
+    
+    return "\n".join(output)
+
+# Function to display a graph
+def display_graph(data):
+    graph_output = []
+    max_label_length = max(len(str(label)) for label, _ in data)
+    max_count = max(count for _, count in data)
+    scale = 50 / max_count
+
+    for label, count in data:
+        bar_length = int(count * scale)
+        if count > max_count * 0.75:
+            bar_color = Fore.RED
+        elif count > max_count * 0.5:
+            bar_color = Fore.YELLOW
+        else:
+            bar_color = Fore.GREEN
+        bar = bar_color + '█' * bar_length + Style.RESET_ALL
+        graph_output.append(f"{str(label).ljust(max_label_length)} | {bar} {count}")
+    graph_output.append("\n")
+    return "\n".join(graph_output)
 
 # Generate report of suspicious IPs
 def generate_suspicious_ip_report(log_entries):
@@ -362,10 +425,70 @@ def display_attack_graph(attack_stats):
         bar = bar_color + '█' * bar_length + Style.RESET_ALL
         print(f"{ip.ljust(max_ip_length)} | {bar} {count}")
     print("\n")
-    
+
+# Display traffic graph
+def display_traffic_graph(traffic_stats):
+    max_period_length = max(len(period) for period in traffic_stats.keys())
+    max_count = max(traffic_stats.values())
+    scale = 50 / max_count
+
+    print(Fore.GREEN + "\n====== Traffic Graph ======" + Style.RESET_ALL)
+    for period, count in traffic_stats.items():
+        bar_length = int(count * scale)
+        if count > max_count * 0.75:
+            bar_color = Fore.RED
+        elif count > max_count * 0.5:
+            bar_color = Fore.YELLOW
+        else:
+            bar_color = Fore.GREEN
+        bar = bar_color + '█' * bar_length + Style.RESET_ALL
+        print(f"{period.ljust(max_period_length)} | {bar} {count}")
+    print("\n")
+
+# Display URL graph
+def display_url_graph(url_stats):
+    max_url_length = max(len(url) for url in url_stats.keys())
+    max_count = max(url_stats.values())
+    scale = 50 / max_count
+
+    print(Fore.GREEN + "\n====== URL Graph ======" + Style.RESET_ALL)
+    for url, count in url_stats.items():
+        bar_length = int(count * scale)
+        if count > max_count * 0.75:
+            bar_color = Fore.RED
+        elif count > max_count * 0.5:
+            bar_color = Fore.YELLOW
+        else:
+            bar_color = Fore.GREEN
+        bar = bar_color + '█' * bar_length + Style.RESET_ALL
+        print(f"{url.ljust(max_url_length)} | {bar} {count}")
+    print("\n")
+
+# Detect high traffic periods and top target URLs
+def detect_high_traffic(log_entries):
+    traffic_counter = Counter()
+    url_counter = Counter()
+
+    for entry in log_entries:
+        timestamp = datetime.strptime(entry['date'], '%d/%b/%Y:%H:%M:%S %z')
+        time_key = timestamp.strftime('%Y-%m-%d %H:%M')
+        traffic_counter[time_key] += 1
+        url_counter[entry['url']] += 1
+
+    top_traffic_periods = traffic_counter.most_common(5)
+    top_target_urls = url_counter.most_common(5)
+
+    return top_traffic_periods, top_target_urls
+
 # Main function
 def main():
-    parser = argparse.ArgumentParser(
+    class CustomArgumentParser(argparse.ArgumentParser):
+        def error(self, message):
+            self.print_help()
+            sys.stderr.write(f"\n\n{Fore.RED}Error: {message}{Style.RESET_ALL}\n\t{Fore.YELLOW}Try: python log_analyzer.py --file <log_file_name>{Style.RESET_ALL}\n\n")
+            sys.exit(2)
+
+    parser = CustomArgumentParser(
         description=Fore.GREEN + r"""
     __                                  __                     
    / /___  ____ _    ____ _____  ____ _/ /_  ______  ___  _____
@@ -409,7 +532,7 @@ def main():
     )
     parser.add_argument(
         "--detect", 
-        choices=['bruteforce', 'fileaccess', 'largefile', 'directorytraversal', 'sqli', 'xss', 'forbiddenaccess', 'ddos', 'malware', 'recentattack'], 
+        choices=['bruteforce', 'fileaccess', 'largefile', 'directorytraversal', 'sqli', 'xss', 'forbiddenaccess', 'ddos', 'malware', 'recentattack', 'hightraffic'], 
         help="Detect specific attack patterns. Example: --detect bruteforce"
     )
     parser.add_argument(
@@ -438,6 +561,10 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.graph and not args.detect:
+        print(f"{Fore.RED}\nError: --graph option requires --detect to be specified.\n\t Example: --detect bruteforce --graph\n{Style.RESET_ALL}")
+        return
+
     start_date = datetime.strptime(args.start_date, '%Y-%m-%d') if args.start_date else None
     end_date = datetime.strptime(args.end_date, '%Y-%m-%d') if args.end_date else None
 
@@ -458,25 +585,44 @@ def main():
         if not log_entries:
             result = f"{Fore.RED}\nNo entries found matching the criteria.\n{Style.RESET_ALL}"
         elif args.detect:
-            attack_stats, url_stats = detect_attack_patterns(log_entries, args.detect)
-            table = PrettyTable()
-            table.field_names = ["IP", "Attempts"]
-            for ip, count in attack_stats.items():
-                table.add_row([ip, count])
-            
-            url_table = PrettyTable()
-            url_table.field_names = ["URL", "Attempts"]
-            for url, count in url_stats.most_common(10):
-                url_table.add_row([url, count])
-            
-            result = f"{Fore.RED}{args.detect.capitalize()} Attempts: {sum(attack_stats.values())}{Style.RESET_ALL}\n{table}\n"
-            result += f"\n{Fore.RED}Top Targeted URLs:{Style.RESET_ALL}\n{url_table}"
-            
-            if args.graph:
-                display_attack_graph(attack_stats)
+            if args.detect == 'hightraffic':
+                top_traffic_periods, top_target_urls = detect_high_traffic(log_entries)
+                traffic_table = PrettyTable()
+                traffic_table.field_names = ["Time Period", "Request Count"]
+                for period, count in top_traffic_periods:
+                    traffic_table.add_row([period, count])
+
+                url_table = PrettyTable()
+                url_table.field_names = ["URL", "Request Count"]
+                for url, count in top_target_urls:
+                    url_table.add_row([url, count])
+
+                result = f"{Fore.RED}Top Traffic Periods:{Style.RESET_ALL}\n{traffic_table}\n"
+                result += f"\n{Fore.RED}Top Target URLs:{Style.RESET_ALL}\n{url_table}"
+
+                if args.graph:
+                    display_traffic_graph(dict(top_traffic_periods))
+                    display_url_graph(dict(top_target_urls))
+            else:
+                attack_stats, url_stats = detect_attack_patterns(log_entries, args.detect)
+                table = PrettyTable()
+                table.field_names = ["IP", "Attempts"]
+                for ip, count in attack_stats.items():
+                    table.add_row([ip, count])
+                
+                url_table = PrettyTable()
+                url_table.field_names = ["URL", "Attempts"]
+                for url, count in url_stats.most_common(10):
+                    url_table.add_row([url, count])
+                
+                result = f"{Fore.RED}{args.detect.capitalize()} Attempts: {sum(attack_stats.values())}{Style.RESET_ALL}\n{table}\n"
+                result += f"\n{Fore.RED}Top Targeted URLs:{Style.RESET_ALL}\n{url_table}"
+                
+                if args.graph:
+                    display_attack_graph(attack_stats)
         elif args.stats:
             stats = generate_statistics(log_entries)
-            result = display_statistics(stats)
+            result = display_statistics_with_graph(stats)
         elif args.report:
             result = generate_suspicious_ip_report(log_entries)
         elif args.user_agent_report:
@@ -498,3 +644,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
