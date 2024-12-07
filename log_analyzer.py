@@ -5,6 +5,7 @@ from collections import Counter
 from prettytable import PrettyTable
 from datetime import datetime
 from colorama import Fore, Style, init
+from concurrent.futures import ThreadPoolExecutor
 
 init()
 
@@ -99,8 +100,11 @@ def detect_attack_patterns(log_entries, attack_type):
         'largefile': re.compile(r'\.zip|\.tar|\.gz|\.rar', re.IGNORECASE),
         'directorytraversal': re.compile(r'(\.\./|\.\.\\)'),
         'sqli': re.compile(r'(\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|--|#)\b)', re.IGNORECASE),
-        'xss': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror=)\b)', re.IGNORECASE),
-        'forbiddenaccess': re.compile(r'403')
+        'xss': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror)\b)', re.IGNORECASE),
+        'forbiddenaccess': re.compile(r'403'),
+        'ddos': re.compile(r'(\b(?:GET|POST)\b)', re.IGNORECASE),
+        'malware': re.compile(r'(\b(?:virus|malware|trojan|worm|spyware|ransomware)\b)', re.IGNORECASE),
+        'recentattack': re.compile(r'(\b(?:exploit|vulnerability|zero-day|cve)\b)', re.IGNORECASE)
     }
     if attack_type not in attack_patterns:
         raise ValueError(f"Unknown attack type: {attack_type}")
@@ -119,26 +123,38 @@ def detect_attack_patterns(log_entries, attack_type):
     sorted_attack_stats = dict(sorted(attack_stats.items(), key=lambda item: item[1], reverse=True))
     return sorted_attack_stats, url_stats
 
-# Analyze large log file
+# Analyze large log file with threading and loading bar
 def analyze_large_log(file_path, chunk_size=1024):
     log_entries = []
     try:
         with open(file_path, 'r') as file:
+            file_size = os.path.getsize(file_path)
+            read_size = 0
             while chunk := file.read(chunk_size):
-                for line in chunk.splitlines():
-                    parsed_entry = parse_log_entry(line)
-                    if parsed_entry:
-                        parsed_entry = sanitize_log_entry(parsed_entry)
-                        log_entries.append(parsed_entry)
+                read_size += len(chunk)
+                print_loading_bar(read_size, file_size, prefix='Processing:', suffix='Complete', length=50)
+                lines = chunk.splitlines()
+                with ThreadPoolExecutor() as executor:
+                    results = executor.map(parse_and_sanitize_log_entry, lines)
+                    log_entries.extend(filter(None, results))
     except FileNotFoundError:
         print(f"{Fore.RED}Error: File {file_path} not found.{Style.RESET_ALL}")
     except Exception as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
     return log_entries
 
+# Custom function to parse and sanitize log entry
+def parse_and_sanitize_log_entry(line):
+    parsed_entry = parse_log_entry(line)
+    if parsed_entry:
+        return sanitize_log_entry(parsed_entry)
+    return None
+
+# Check if the file is a valid log file
 def is_valid_log_file(file_path):
     return file_path.endswith('.log')
 
+# Analyze log file
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
     if not is_valid_log_file(file_path):
         raise ValueError(f"Invalid file format: {file_path}. Only .log files are supported.")
@@ -150,20 +166,12 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
         with open(file_path, 'r') as file:
             lines = file.readlines()
             total_lines = len(lines)
-            for i, line in enumerate(lines):
-                print_loading_bar(i + 1, total_lines, prefix='Processing:', suffix='Complete', length=50)
-                parsed_entry = parse_log_entry(line)
-                if parsed_entry:
-                    parsed_entry = sanitize_log_entry(parsed_entry)
-                    entry_date = datetime.strptime(parsed_entry['date'], '%d/%b/%Y:%H:%M:%S %z')
-                    if start_date and entry_date < start_date:
-                        continue
-                    if end_date and entry_date > end_date:
-                        continue
-                    anomalies, rating = detect_anomalies(parsed_entry)
-                    parsed_entry['anomalies'] = anomalies
-                    parsed_entry['rating'] = rating
-                    log_entries.append(parsed_entry)
+            with ThreadPoolExecutor() as executor:
+                results = executor.map(process_log_line, lines, [start_date]*total_lines, [end_date]*total_lines)
+                for i, result in enumerate(results):
+                    print_loading_bar(i + 1, total_lines, prefix='Analyzing File:', suffix='Complete', length=50)
+                    if result:
+                        log_entries.append(result)
     except Exception as e:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
 
@@ -172,6 +180,23 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
 
     return log_entries
 
+# Process log line
+def process_log_line(line, start_date, end_date):
+    parsed_entry = parse_log_entry(line)
+    if parsed_entry:
+        parsed_entry = sanitize_log_entry(parsed_entry)
+        entry_date = datetime.strptime(parsed_entry['date'], '%d/%b/%Y:%H:%M:%S %z')
+        if start_date and entry_date < start_date:
+            return None
+        if end_date and entry_date > end_date:
+            return None
+        anomalies, rating = detect_anomalies(parsed_entry)
+        parsed_entry['anomalies'] = anomalies
+        parsed_entry['rating'] = rating
+        return parsed_entry
+    return None
+
+# Analyze multiple log files
 def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end_date=None):
     all_log_entries = []
     for file_path in file_paths:
@@ -248,7 +273,7 @@ def generate_suspicious_ip_report(log_entries):
     suspicious_patterns = {
         'Directory traversal': re.compile(r'(\.\./|\.\.\\)'),
         'SQL injection': re.compile(r'(\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION|--|#)\b)', re.IGNORECASE),
-        'XSS': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror=)\b)', re.IGNORECASE),
+        'XSS': re.compile(r'(\b(?:<script>|</script>|javascript:|onload=|onerror)\b)', re.IGNORECASE),
         'Sensitive file access': re.compile(r'(\b(?:admin|root|config|passwd|shadow)\b)', re.IGNORECASE),
         'File access': re.compile(r'\.sqlite|\.log|\.db|\.pdf|\.sql', re.IGNORECASE),
         'Brute force': re.compile(r'login|signin|password|admin', re.IGNORECASE)
@@ -309,6 +334,7 @@ def detect_user_agent_anomalies(log_entries):
 
     return table
 
+# Save output to file
 def save_output_to_file(output, file_name):
     output_dir = 'output'
     if not os.path.exists(output_dir):
@@ -318,6 +344,25 @@ def save_output_to_file(output, file_name):
         output_file.write(re.sub(r'\x1b\[[0-9;]*m', '', str(output)))
     print(f"{Fore.GREEN}\nOutput saved to {file_path}\n{Style.RESET_ALL}")
 
+# Display attack graph
+def display_attack_graph(attack_stats):
+    max_ip_length = max(len(ip) for ip in attack_stats.keys())
+    max_count = max(attack_stats.values())
+    scale = 50 / max_count
+
+    print(Fore.GREEN + "\n====== Attack Graph ======" + Style.RESET_ALL)
+    for ip, count in attack_stats.items():
+        bar_length = int(count * scale)
+        if count > max_count * 0.75:
+            bar_color = Fore.RED
+        elif count > max_count * 0.5:
+            bar_color = Fore.YELLOW
+        else:
+            bar_color = Fore.GREEN
+        bar = bar_color + '█' * bar_length + Style.RESET_ALL
+        print(f"{ip.ljust(max_ip_length)} | {bar} {count}")
+    print("\n")
+    
 # Main function
 def main():
     parser = argparse.ArgumentParser(
@@ -364,8 +409,13 @@ def main():
     )
     parser.add_argument(
         "--detect", 
-        choices=['bruteforce', 'fileaccess', 'largefile', 'directorytraversal', 'sqli', 'xss', 'forbiddenaccess'], 
+        choices=['bruteforce', 'fileaccess', 'largefile', 'directorytraversal', 'sqli', 'xss', 'forbiddenaccess', 'ddos', 'malware', 'recentattack'], 
         help="Detect specific attack patterns. Example: --detect bruteforce"
+    )
+    parser.add_argument(
+        "--graph", 
+        action="store_true", 
+        help="Display a graphical representation of the attack patterns. Example: --detect bruteforce --graph"
     )
     parser.add_argument(
         "-r", "--report", 
@@ -421,6 +471,9 @@ def main():
             
             result = f"{Fore.RED}{args.detect.capitalize()} Attempts: {sum(attack_stats.values())}{Style.RESET_ALL}\n{table}\n"
             result += f"\n{Fore.RED}Top Targeted URLs:{Style.RESET_ALL}\n{url_table}"
+            
+            if args.graph:
+                display_attack_graph(attack_stats)
         elif args.stats:
             stats = generate_statistics(log_entries)
             result = display_statistics(stats)

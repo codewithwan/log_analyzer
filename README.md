@@ -12,11 +12,12 @@ This tool analyzes Apache/Nginx access log files to detect anomalies, generate s
 - **Multiple Log Files Analysis**: Analyze multiple log files at once.
 - **Suspicious User-Agent Report**: Generate a report of suspicious User-Agents.
 - **Output to File**: Save the analysis result to an output file.
+- **Graphical Representation**: Display a graphical representation of attack patterns.
 
 ## Requirements
 
 - Python 3.x
-- `argparse`, `re`, `prettytable` modules (all can be installed via `pip`).
+- `argparse`, `re`, `prettytable`, `colorama` modules (all can be installed via `pip`).
 
 ```bash
 pip install -r requirements.txt
@@ -60,7 +61,7 @@ python log_analyzer.py -h
 
   - Example: `--regex-search 'admin'`
 
-- `--detect` {bruteforce,fileaccess,largefile,directorytraversal,sqli,xss,forbiddenaccess} : Detect specific attack patterns.
+- `--detect` {bruteforce,fileaccess,largefile,directorytraversal,sqli,xss,forbiddenaccess,csrf,ssrf} : Detect specific attack patterns.
 
   - Example: `--detect bruteforce`
 
@@ -77,6 +78,9 @@ python log_analyzer.py -h
 
 - `-o`, `--output`: Output file to save the result. If not provided, the result will be displayed in the terminal.
   - Example: `-o output.txt`
+
+- `-g`, `--graph`: Display a graphical representation of attack patterns.
+  - Example: `--graph`
 
 ## Example Commands
 
@@ -110,6 +114,12 @@ python log_analyzer.py -h
    python log_analyzer.py --file access.log --output result.txt
    ```
 
+6. **Display a graphical representation of attack patterns:**
+
+   ```bash
+   python log_analyzer.py --file access.log --graph
+   ```
+
 ## Example Output
 
 When you run the tool, it will display or save a table of log entries with anomalies, including:
@@ -141,6 +151,16 @@ HTTP Status Codes:
   403: 300
   500: 200
   ...
+```
+
+### Graphical Representation
+
+The graph option will output a graphical representation of attack patterns, such as:
+
+```
+====== Attack Graph ======
+185.160.71.3 | ██████████████████████████████████████████████ 300
+192.168.1.1  | ██████████████████████████████████████████ 200
 ```
 
 ## License
