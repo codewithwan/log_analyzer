@@ -136,26 +136,12 @@ def analyze_large_log(file_path, chunk_size=1024):
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
     return log_entries
 
-# Analyze multiple log files
-def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end_date=None):
-    all_log_entries = []
-    for file_path in file_paths:
-        log_entries = analyze_log(file_path, only_anomalies, start_date, end_date)
-        all_log_entries.extend(log_entries)
-    return all_log_entries
+def is_valid_log_file(file_path):
+    return file_path.endswith('.log')
 
-# Function to display a loading bar
-def print_loading_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='\r')
-    if iteration == total:
-        print()
-        print('\r' + ' ' * (len(prefix) + length + len(suffix) + 10), end='\r')
-
-# Analyze log file
 def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None):
+    if not is_valid_log_file(file_path):
+        raise ValueError(f"Invalid file format: {file_path}. Only .log files are supported.")
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File {file_path} not found.")
 
@@ -185,6 +171,26 @@ def analyze_log(file_path, only_anomalies=False, start_date=None, end_date=None)
         log_entries = [entry for entry in log_entries if entry['anomalies']]
 
     return log_entries
+
+def analyze_multiple_logs(file_paths, only_anomalies=False, start_date=None, end_date=None):
+    all_log_entries = []
+    for file_path in file_paths:
+        if not is_valid_log_file(file_path):
+            print(f"{Fore.RED}Skipping invalid file format: {file_path}. Only .log files are supported.{Style.RESET_ALL}")
+            continue
+        log_entries = analyze_log(file_path, only_anomalies, start_date, end_date)
+        all_log_entries.extend(log_entries)
+    return all_log_entries
+
+# Function to display a loading bar
+def print_loading_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = Fore.GREEN + fill * filled_length + Fore.RED + '-' * (length - filled_length) + Style.RESET_ALL
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='\r')
+    if iteration == total:
+        print()
+        print('\r' + ' ' * (len(prefix) + length + len(suffix) + 10), end='\r')
 
 # Generate statistics
 def generate_statistics(log_entries):
@@ -222,7 +228,7 @@ def display_log_entries(log_entries):
 # Display statistics
 def display_statistics(stats):
     output = []
-    output.append(Fore.GREEN + "\n=== Statistics ===" + Style.RESET_ALL)
+    output.append(Fore.GREEN + "\n====== Statistics ======" + Style.RESET_ALL)
     output.append(f"Total Requests: {Fore.YELLOW}{stats['total_requests']}{Style.RESET_ALL}")
     output.append(Fore.GREEN + "\nTop 5 IPs:" + Style.RESET_ALL)
     for ip, count in stats['ip_counter'].most_common(5):
@@ -279,6 +285,39 @@ def generate_suspicious_ip_report(log_entries):
 
     return table
 
+# Detect User-Agent anomalies
+def detect_user_agent_anomalies(log_entries):
+    suspicious_user_agents = {}
+    suspicious_patterns = {
+        'Suspicious User-Agent': re.compile(r'(curl|wget|python-requests|libwww-perl|nikto|sqlmap)', re.IGNORECASE)
+    }
+
+    for entry in log_entries:
+        for activity, pattern in suspicious_patterns.items():
+            if pattern.search(entry['user_agent']):
+                if entry['ip'] not in suspicious_user_agents:
+                    suspicious_user_agents[entry['ip']] = {'count': 0, 'user_agents': set()}
+                suspicious_user_agents[entry['ip']]['count'] += 1
+                suspicious_user_agents[entry['ip']]['user_agents'].add(entry['user_agent'])
+
+    table = PrettyTable()
+    table.field_names = ["IP", "Suspicious User-Agent Count", "User-Agents"]
+    sorted_ips = sorted(suspicious_user_agents.items(), key=lambda x: (-x[1]['count']))
+    for ip, details in sorted_ips:
+        user_agents = ", ".join(details['user_agents'])
+        table.add_row([ip, details['count'], user_agents])
+
+    return table
+
+def save_output_to_file(output, file_name):
+    output_dir = 'output'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    file_path = os.path.join(output_dir, file_name)
+    with open(file_path, 'w') as output_file:
+        output_file.write(re.sub(r'\x1b\[[0-9;]*m', '', str(output)))
+    print(f"{Fore.GREEN}\nOutput saved to {file_path}\n{Style.RESET_ALL}")
+
 # Main function
 def main():
     parser = argparse.ArgumentParser(
@@ -293,34 +332,34 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
-        "--file", 
+        "-f", "--file", 
         required=True, 
         help="Path to the log file (required).\nExample: --file access.log"
     )
     parser.add_argument(
-        "--only-anomalies", 
+        "-a", "--only-anomalies", 
         action="store_true", 
         help="Display only entries with anomalies.\nExample: --only-anomalies"
     )
     parser.add_argument(
-        "--stats", 
+        "-s", "--stats", 
         action="store_true", 
         help="Display statistics of the log file.\nExample: --stats"
     )
     parser.add_argument(
-        "--start-date", 
+        "-sd", "--start-date", 
         help="Filter logs starting from this date (inclusive). Format: YYYY-MM-DD\nExample: --start-date 2023-01-01"
     )
     parser.add_argument(
-        "--end-date", 
+        "-ed", "--end-date", 
         help="Filter logs up to this date (inclusive). Format: YYYY-MM-DD\nExample: --end-date 2023-12-31"
     )
     parser.add_argument(
-        "--find", 
+        "-fi", "--find", 
         help="Search for single or multiple keywords (URL, status, etc.). Example: --find pdf , --find sql,200"
     )
     parser.add_argument(
-        "--regex-search", 
+        "-rs", "--regex-search", 
         help="Search logs using a regex pattern. Example: --regex-search 'admin'"
     )
     parser.add_argument(
@@ -329,14 +368,19 @@ def main():
         help="Detect specific attack patterns. Example: --detect bruteforce"
     )
     parser.add_argument(
-        "--report", 
+        "-r", "--report", 
         action="store_true", 
         help="Generate a summary report of suspicious IPs.\nExample: --report"
     )
     parser.add_argument(
-        "--multi-log", 
+        "-ml", "--multi-log", 
         nargs='+', 
         help="Analyze multiple log files. Example: --multi-log file1.log file2.log"
+    )
+    parser.add_argument(
+        "-ua", "--user-agent-report", 
+        action="store_true", 
+        help="Generate a report of suspicious User-Agents.\nExample: --user-agent-report"
     )
     parser.add_argument(
         "-o", "--output", 
@@ -351,6 +395,8 @@ def main():
         if args.multi_log:
             log_entries = analyze_multiple_logs(args.multi_log, args.only_anomalies, start_date, end_date)
         else:
+            if not is_valid_log_file(args.file):
+                raise ValueError(f"Invalid file format: {args.file}. Only .log files are supported.")
             log_entries = analyze_log(args.file, args.only_anomalies, start_date, end_date)
 
         if args.find:
@@ -380,20 +426,22 @@ def main():
             result = display_statistics(stats)
         elif args.report:
             result = generate_suspicious_ip_report(log_entries)
+        elif args.user_agent_report:
+            result = detect_user_agent_anomalies(log_entries)
         else:
             result = display_log_entries(log_entries)
 
         if args.output:
-            with open(args.output, 'w') as output_file:
-                output_file.write(re.sub(r'\x1b\[[0-9;]*m', '', str(result)))
-            print(f"{Fore.GREEN}\nOutput saved to {args.output}\n{Style.RESET_ALL}")
+            save_output_to_file(result, args.output)
         else:
             print(result)
 
     except FileNotFoundError as e:
-        print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+        print(f"{Fore.RED}\nError: {e}\n{Style.RESET_ALL}")
+    except ValueError as e:
+        print(f"{Fore.RED}\nError: {e}\n{Style.RESET_ALL}")
     except Exception as e:
-        print(f"{Fore.RED}Unexpected error: {e}{Style.RESET_ALL}")
+        print(f"{Fore.RED}\nUnexpected error: {e}{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     main()
