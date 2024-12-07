@@ -29,38 +29,51 @@ python log_analyzer.py -h
 
 ### Options:
 
-- `--file`: **Required**. Path to the log file to analyze.
-    - Example: `--file access.log`
+- `-f`, `--file`: **Required**. Path to the log file to analyze.
 
-- `--only-anomalies`: Display only log entries with anomalies.
-    - Example: `--only-anomalies`
+  - Example: `--file access.log`
 
-- `--stats`: Display statistics about the log file (e.g., request count, IP frequencies).
-    - Example: `--stats`
+- `-a`, `--only-anomalies`: Display only log entries with anomalies.
 
-- `--start-date`: Filter logs starting from this date (inclusive). Format: `YYYY-MM-DD`.
-    - Example: `--start-date 2023-01-01`
+  - Example: `--only-anomalies`
 
-- `--end-date`: Filter logs up to this date (inclusive). Format: `YYYY-MM-DD`.
-    - Example: `--end-date 2023-12-31`
+- `-s`, `--stats`: Display statistics about the log file (e.g., request count, IP frequencies).
 
-- `--find`: Search for single or multiple keywords (URL, status, etc.).
-    - Example: `--find pdf` , `--find sql,200`
+  - Example: `--stats`
 
-- `--regex-search` : Search logs using a regex pattern.
-    - Example: `--regex-search 'admin'`
+- `-sd`, `--start-date`: Filter logs starting from this date (inclusive). Format: `YYYY-MM-DD`.
 
-- `--detect` {bruteforce,fileaccess} : Detect specific attack patterns.
-    - Example: `--detect bruteforce`
+  - Example: `--start-date 2023-01-01`
 
-- `--report` :  Generate a summary report of suspicious IPs.
-    - Example: `--report`
+- `ed`, `--end-date`: Filter logs up to this date (inclusive). Format: `YYYY-MM-DD`.
 
-- `--multi-log` : Analyze multiple log files.
-    - Example: `--multi-log file1.log file2.log`
+  - Example: `--end-date 2023-12-31`
+
+- `-fi`, `--find`: Search for single or multiple keywords (URL, status, etc.).
+
+  - Example: `--find pdf` , `--find sql,200`
+
+- `-rs`, `--regex-search` : Search logs using a regex pattern.
+
+  - Example: `--regex-search 'admin'`
+
+- `--detect` {bruteforce,fileaccess,largefile,directorytraversal,sqli,xss,forbiddenaccess} : Detect specific attack patterns.
+
+  - Example: `--detect bruteforce`
+
+- `-r`,`--report` : Generate a summary report of suspicious IPs.
+
+  - Example: `--report`
+
+- `-ml`, `--multi-log` : Analyze multiple log files.
+
+  - Example: `--multi-log file1.log file2.log`
+
+- `-ua`, `--user-agent-report`: Generate a report of suspicious User-Agents.
+  - Example: Example: --user-agent-report
 
 - `-o`, `--output`: Output file to save the result. If not provided, the result will be displayed in the terminal.
-    - Example: `-o output.txt`
+  - Example: `-o output.txt`
 
 ## Example Commands
 
@@ -98,9 +111,9 @@ python log_analyzer.py -h
 
 When you run the tool, it will display or save a table of log entries with anomalies, including:
 
-| IP Address   | Date                | Method | URL                      | Status | Size | Anomalies                | Rating |
-|--------------|---------------------|--------|--------------------------|--------|------|--------------------------|--------|
-| 185.160.71.3 | 01/Jan/2023:12:00:00 | GET    | /admin/config/            | 403    | 1500 | Directory traversal attempt, Sensitive file access attempt | 7      |
+| IP Address   | Date                 | Method | URL            | Status | Size | Anomalies                                                  | Rating |
+| ------------ | -------------------- | ------ | -------------- | ------ | ---- | ---------------------------------------------------------- | ------ |
+| 185.160.71.3 | 01/Jan/2023:12:00:00 | GET    | /admin/config/ | 403    | 1500 | Directory traversal attempt, Sensitive file access attempt | 7      |
 
 ### Log Statistics
 
