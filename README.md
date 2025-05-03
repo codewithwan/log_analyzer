@@ -28,7 +28,7 @@ pip install -r requirements.txt
 ### Command Line Arguments
 
 ```bash
-python log_analyzer.py -h
+python log-analyzer.py -h
 ```
 
 ### Options:
